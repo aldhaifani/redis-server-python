@@ -25,6 +25,9 @@ class RedisServer:
         try:
             while True: # Loop to read commands from the client
                 data = await reader.read(1024)
+                # If no data is received, the client has closed the connection
+                if not data:
+                    break
                 response = await self.process_command(data.decode())
                 if response: # If there is a response, send it back to the client
                     writer.write(response)
