@@ -14,6 +14,7 @@ class RedisServer:
         """
         self.port = port
         self.host = host
+        self.db = {}
 
     async def handle_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
         """
@@ -54,6 +55,18 @@ class RedisServer:
             if len(commands) != 2 or len(commands[1]) == 0: # Error if no argument is provided
                 return "-ERR wrong number of arguments for command\r\n"
             return f"${len(commands[1])}\r\n{commands[1]}\r\n"
+        elif "SET" in commands[0].upper(): # Handle the command SET
+            if len(commands) != 3:
+                return "-ERR wrong number of arguments for command\r\n"
+            self.db[commands[1]] = commands[2]
+            return "+OK\r\n"
+        elif "GET" in commands[0].upper(): # Handle the command GET
+            if len(commands) != 2:
+                return "-ERR wrong number of arguments for command\r\n"
+            if commands[1] in self.db:
+                return f"${len(self.db[commands[1]])}\r\n{self.db[commands[1]]}\r\n"
+            else:
+                return "$-1\r\n"
         else:
             return None  # No response for invalid commands
 
