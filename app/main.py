@@ -1,5 +1,6 @@
 import asyncio
 
+
 """
 This is a simple Redis server that only responds to the PING command.
 It handles multiple clients concurrently using asyncio, with a single thread.
@@ -30,7 +31,7 @@ class RedisServer:
                     break
                 response = await self.process_command(data.decode())
                 if response: # If there is a response, send it back to the client
-                    writer.write(response)
+                    writer.write(response.encode())
                     await writer.drain()
         except Exception as e:
             print(e)
@@ -39,16 +40,22 @@ class RedisServer:
             writer.close()
             await writer.wait_closed()
 
-    async def process_command(self, command: str):
+    async def process_command(self, data: str):
         """
         Process commands received from the client.
-        :param command: command string
+        :param data: data string
         :return: response string or None
         """
-        if "PING" in command:
-            return b"+PONG\r\n"
+        commands = self.resp_parser(data)
+
+        if "PING" in commands[0].upper(): # Handle the command PING
+            return "+PONG\r\n"
+        elif "ECHO" in commands[0].upper(): # Handle the command ECHO
+            if len(commands) != 2 or len(commands[1]) == 0: # Error if no argument is provided
+                return "-ERR wrong number of arguments for command\r\n"
+            return f"${len(commands[1])}\r\n{commands[1]}\r\n"
         else:
-            return None
+            return None  # No response for invalid commands
 
     async def start(self):
         """
@@ -56,7 +63,26 @@ class RedisServer:
         :return: nothing
         """
         server = await asyncio.start_server(self.handle_client, self.host, self.port)
-        await server.serve_forever()
+        await server.serve_forever() # Start the server and keep it running
+
+    def resp_parser(self, data: str):
+        """
+        Parse RESP protocol data.
+        :param data: data string to parse
+        :return: commands list
+        """
+        data_list = data.strip().split("\r\n")
+        commands = []
+
+        # Filter out empty strings and protocol markers
+        for d in data_list:
+            if d[0] in ['*', '$', ':'] or len(d) == 0:
+                continue
+            else:
+                commands.append(d)
+
+        return commands
+
 
 if __name__ == "__main__":
     redis_server = RedisServer()
