@@ -1,4 +1,5 @@
 import asyncio
+from datetime import datetime, timedelta
 
 
 """
@@ -15,6 +16,7 @@ class RedisServer:
         self.port = port
         self.host = host
         self.db = {}
+        self.expirations = {}
 
     async def handle_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
         """
@@ -56,9 +58,21 @@ class RedisServer:
                 return "-ERR wrong number of arguments for command\r\n"
             return f"${len(commands[1])}\r\n{commands[1]}\r\n"
         elif "SET" in commands[0].upper(): # Handle the command SET
-            if len(commands) != 3:
+            if len(commands) < 3:
                 return "-ERR wrong number of arguments for command\r\n"
-            self.db[commands[1]] = commands[2]
+            key = commands[1]
+            value = commands[2]
+            expiry = None
+            if len(commands) > 3 and commands[3].upper() == "PX": # Handle expiry time
+                if len(commands) < 5:
+                    return "-ERR wrong number of arguments for command\r\n"
+                try:
+                    expiry = int(commands[4])
+                except ValueError:
+                    return "-ERR invalid expire time\r\n"
+                expiry_time = datetime.now() + timedelta(milliseconds=expiry)
+                self.expirations[key] = expiry_time
+            self.db[key] = value
             return "+OK\r\n"
         elif "GET" in commands[0].upper(): # Handle the command GET
             if len(commands) != 2:
@@ -93,10 +107,36 @@ class RedisServer:
                 continue
             else:
                 commands.append(d)
-
         return commands
 
 
-if __name__ == "__main__":
+    async def check_expiration(self):
+        """
+        Check for expired keys and remove them from the database.
+        :return:
+        """
+        while True:
+            now = datetime.now()
+            for key, expiry_time in list(self.expirations.items()):
+                if now >= expiry_time:
+                    del self.db[key]
+                    del self.expirations[key]
+            await asyncio.sleep(0.1)  # Check for expired keys every 100 milliseconds
+
+
+async def main():
+    """
+    Start the Redis server and check for expired keys.
+    :return:
+    """
     redis_server = RedisServer()
-    asyncio.run(redis_server.start())
+    check_expiration_task = asyncio.create_task(redis_server.check_expiration())
+    try:
+        await redis_server.start()
+    finally:
+        check_expiration_task.cancel()
+        await check_expiration_task
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
