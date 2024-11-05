@@ -77,9 +77,15 @@ class RedisServer:
         elif "GET" in commands[0].upper(): # Handle the command GET
             if len(commands) != 2:
                 return "-ERR wrong number of arguments for command\r\n"
-            if commands[1] in self.db:
-                return f"${len(self.db[commands[1]])}\r\n{self.db[commands[1]]}\r\n"
+            key = commands[1]
+            # Check if key exists and is not expired
+            if key in self.db and (key not in self.expirations or datetime.now() < self.expirations[key]):
+                return f"${len(self.db[key])}\r\n{self.db[key]}\r\n"
             else:
+                # Delete the key if it is expired
+                if key in self.expirations and datetime.now() >= self.expirations[key]:
+                    del self.db[key]
+                    del self.expirations[key]
                 return "$-1\r\n"
         else:
             return None  # No response for invalid commands
@@ -110,33 +116,6 @@ class RedisServer:
         return commands
 
 
-    async def check_expiration(self):
-        """
-        Check for expired keys and remove them from the database.
-        :return:
-        """
-        while True:
-            now = datetime.now()
-            for key, expiry_time in list(self.expirations.items()):
-                if now >= expiry_time:
-                    del self.db[key]
-                    del self.expirations[key]
-            await asyncio.sleep(0.1)  # Check for expired keys every 100 milliseconds
-
-
-async def main():
-    """
-    Start the Redis server and check for expired keys.
-    :return:
-    """
-    redis_server = RedisServer()
-    check_expiration_task = asyncio.create_task(redis_server.check_expiration())
-    try:
-        await redis_server.start()
-    finally:
-        check_expiration_task.cancel()
-        await check_expiration_task
-
-
 if __name__ == "__main__":
-    asyncio.run(main())
+    redis_server = RedisServer()
+    asyncio.run(redis_server.start())
