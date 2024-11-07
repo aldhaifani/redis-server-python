@@ -23,6 +23,7 @@ class RedisServer:
         """
         self.port = port
         self.host = host
+        self.server = None
         self.db = DatabaseHandler()
         self.expirations_manager = ExpirationManager()
         self.command_handler = CommandHandler(self.db, self.expirations_manager)
@@ -59,6 +60,15 @@ class RedisServer:
         Start the server asynchronously and listen for incoming connections.
         :return: nothing
         """
-        server = await asyncio.start_server(self.handle_client, self.host, self.port)
-        async with server:
-            await server.serve_forever()
+        self.server = await asyncio.start_server(self.handle_client, self.host, self.port)
+        async with self.server:
+            await self.server.serve_forever()
+
+    async def stop(self):
+        """
+        Stop the server asynchronously.
+        :return: nothing
+        """
+        if self.server:
+            self.server.close()
+            await self.server.wait_closed()
