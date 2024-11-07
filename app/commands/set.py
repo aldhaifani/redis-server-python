@@ -4,6 +4,10 @@ from app import DatabaseHandler, ExpirationManager
 
 COMMAND_NAME = "SET"
 
+# TODO:
+# - Implement setting a key with empty string value
+# - Implement setting a key with large string (1000+ characters) value
+
 def handle_command(args: list, database: DatabaseHandler, expirations_manager: ExpirationManager) -> str:
     if len(args) < 2:
         return "-ERR wrong number of arguments for command\r\n"
