@@ -1,7 +1,7 @@
 import asyncio
 
 from app import CommandHandler, DatabaseHandler, ExpirationManager
-from app.utils import resp_parser
+from app.utils import *
 
 """
 A simple Redis server implementation.
@@ -15,12 +15,17 @@ Redis commands supported:
 Handles multiple clients concurrently using asyncio.
 """
 class RedisServer:
-    def __init__(self, host: str = "localhost", port: int = 6379):
+    def __init__(self, host: str = "localhost", port: int = 6379, config: dict = None):
         """
         Set the host and port for the server.
         :param host: host name or IP address, str
         :param port: port number, int
+        :param config: configuration dictionary, dict
         """
+        if config is None:
+            self.config = {}
+        else:
+            self.config = config
         self.port = port
         self.host = host
         self.server = None
@@ -43,8 +48,11 @@ class RedisServer:
                 if not data:
                     break
                 command = resp_parser(data.decode()) # Parse the command
-                # Handle the command and get the response
-                response = await self.command_handler.handle_command(command[0], command[1:])
+                if command[0].upper() == "CONFIG": # Handle CONFIG command
+                    response = config_handler(command, self.config)
+                else:
+                    # Handle the command and get the response
+                    response = await self.command_handler.handle_command(command[0], command[1:])
                 if response: # If there is a response, send it back to the client
                     writer.write(response.encode())
                     await writer.drain()
